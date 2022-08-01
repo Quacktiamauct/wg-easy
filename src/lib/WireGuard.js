@@ -10,13 +10,15 @@ const QRCode = require('qrcode');
 const Util = require('./Util');
 const ServerError = require('./ServerError');
 
+const Netmask = require('netmask').Netmask;
+
 const {
   WG_PATH,
   WG_HOST,
   WG_PORT,
   WG_MTU,
   WG_DEFAULT_DNS,
-  WG_DEFAULT_ADDRESS,
+  WG_NETMASK,
   WG_PERSISTENT_KEEPALIVE,
   WG_ALLOWED_IPS,
   WG_PRE_UP,
@@ -45,7 +47,7 @@ module.exports = class WireGuard {
           const publicKey = await Util.exec(`echo ${privateKey} | wg pubkey`, {
             log: 'echo ***hidden*** | wg pubkey',
           });
-          const address = WG_DEFAULT_ADDRESS.replace('x', '1');
+          const address = Netmask(WG_NETMASK).first();
 
           config = {
             server: {
@@ -232,15 +234,11 @@ Endpoint = ${WG_HOST}:${WG_PORT}`;
 
     // Calculate next IP
     let address;
-    for (let i = 2; i < 255; i++) {
-      const client = Object.values(config.clients).find(client => {
-        return client.address === WG_DEFAULT_ADDRESS.replace('x', i);
-      });
-
-      if (!client) {
-        address = WG_DEFAULT_ADDRESS.replace('x', i);
-        break;
-      }
+    if (config.clients > 0) {
+      let lastClient = config.clients[config.clients.length - 1];
+      address = Netmask(lastClient.address).next();
+    } else {
+      address = Netmask(WG_NETMASK).next();
     }
 
     if (!address) {
